@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEURAL LINK // P2P SYSTEM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --neon-cyan: #00f3ff;
+            --neon-purple: #bc13fe;
+            --dark-bg: #030712;
+            --glass-bg: rgba(10, 15, 30, 0.7);
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: var(--dark-bg);
+            color: white;
+            overflow-x: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        .font-cyber {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Glitch Effect */
+        .glitch {
+            position: relative;
+        }
+        
+        .glitch::before,
+        .glitch::after {
+            content: attr(data-text);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .glitch::before {
+            left: 2px;
+            text-shadow: -1px 0 #ff00c1;
+            clip: rect(44px, 450px, 56px, 0);
+            animation: glitch-anim 5s infinite linear alternate-reverse;
+        }
+
+        .glitch::after {
+            left: -2px;
+            text-shadow: -1px 0 #00fff9;
+            clip: rect(44px, 450px, 56px, 0);
+            animation: glitch-anim2 5s infinite linear alternate-reverse;
+        }
+
+        @keyframes glitch-anim {
+            0% { clip: rect(32px, 9999px, 18px, 0); }
+            5% { clip: rect(66px, 9999px, 88px, 0); }
+            10% { clip: rect(12px, 9999px, 96px, 0); }
+            15% { clip: rect(45px, 9999px, 2px, 0); }
+            20% { clip: rect(89px, 9999px, 62px, 0); }
+            100% { clip: rect(54px, 9999px, 12px, 0); }
+        }
+
+        @keyframes glitch-anim2 {
+            0% { clip: rect(12px, 9999px, 58px, 0); }
+            5% { clip: rect(86px, 9999px, 12px, 0); }
+            10% { clip: rect(32px, 9999px, 44px, 0); }
+            15% { clip: rect(96px, 9999px, 88px, 0); }
+            20% { clip: rect(12px, 9999px, 32px, 0); }
+            100% { clip: rect(64px, 9999px, 94px, 0); }
+        }
+
+        /* Scanline */
+        .scanline {
+            width: 100%;
+            height: 100px;
+            z-index: 10;
+            background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(0, 243, 255, 0.1) 50%, rgba(0,0,0,0) 100%);
+            opacity: 0.1;
+            position: absolute;
+            bottom: 100%;
+            animation: scanline 10s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes scanline {
+            0% { bottom: 100%; }
+            80% { bottom: -100%; }
+            100% { bottom: -100%; }
+        }
+
+        /* Button Hover Effects */
+        .cyber-btn {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .cyber-btn:hover {
+            box-shadow: 0 0 20px var(--neon-cyan);
+            text-shadow: 0 0 8px white;
+        }
+
+        .cyber-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: 0.5s;
+        }
+
+        .cyber-btn:hover::before {
+            left: 100%;
+        }
+
+        /* Card Styles */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.05);
+        }
+
+        .glass-panel:hover {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.15);
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center relative">
+
+    <!-- Background Animation -->
+    <div id="canvas-container">
+        <canvas id="neuroCanvas"></canvas>
+    </div>
+
+    <!-- CRT Scanline Overlay -->
+    <div class="fixed inset-0 pointer-events-none z-50 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjMDAwIiBmaWxsLW9wYWNpdHk9IjAuMSIvPgo8L3N2Zz4=')] opacity-30"></div>
+    <div class="scanline"></div>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8 z-10 w-full max-w-6xl flex flex-col items-center">
+        
+        <!-- Header -->
+        <header class="text-center mb-16 relative group cursor-default">
+            <div class="absolute -inset-4 bg-cyan-500/20 rounded-full blur-3xl opacity-0 group-hover:opacity-50 transition duration-1000"></div>
+            <h2 class="text-cyan-400 font-cyber tracking-[0.3em] text-sm md:text-base mb-2 animate-pulse">SYSTEM ACCESS PORTAL</h2>
+            <h1 class="text-5xl md:text-8xl font-black font-cyber text-white mb-2 glitch" data-text="NEURAL LINK">NEURAL LINK</h1>
+            <div class="flex items-center justify-center gap-2 text-gray-400 font-mono text-xs md:text-sm">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span>P2P NETWORK STATUS: <span class="text-green-400">ONLINE</span></span>
+                <span class="mx-2">|</span>
+                <span>v2.4.9-beta</span>
+            </div>
+        </header>
+
+        <!-- Access Nodes (Cards) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+            
+            <!-- Main System Link -->
+            <div class="glass-panel p-8 rounded-xl relative overflow-hidden group transition-all duration-300 transform hover:-translate-y-2">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i data-lucide="network" class="w-32 h-32 text-cyan-400"></i>
+                </div>
+                
+                <div class="relative z-10 flex flex-col h-full">
+                    <div class="mb-6">
+                        <div class="w-12 h-12 rounded bg-cyan-900/50 flex items-center justify-center border border-cyan-500/30 mb-4 group-hover:border-cyan-400 transition-colors">
+                            <i data-lucide="cpu" class="text-cyan-400"></i>
+                        </div>
+                        <h3 class="text-3xl font-cyber text-white mb-2 group-hover:text-cyan-300 transition-colors">MAIN SYSTEM</h3>
+                        <p class="text-gray-400 leading-relaxed text-sm">
+                            Access the core Neural Link interface. Manage P2P nodes, visualize data streams, and configure network protocols.
+                        </p>
+                    </div>
+                    
+                    <div class="mt-auto pt-6 border-t border-gray-800">
+                        <div class="flex flex-col gap-3">
+                            <div class="flex justify-between text-xs font-mono text-cyan-600 mb-1">
+                                <span>LATENCY</span>
+                                <span>12ms</span>
+                            </div>
+                            <!-- Action Button -->
+                            <a href="#" onclick="triggerLink('main')" class="cyber-btn w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold font-cyber py-4 px-6 rounded flex items-center justify-center gap-2 uppercase tracking-wider">
+                                <i data-lucide="zap" class="w-5 h-5"></i>
+                                Initialize Link
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- APK Download Link -->
+            <div class="glass-panel p-8 rounded-xl relative overflow-hidden group transition-all duration-300 transform hover:-translate-y-2">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i data-lucide="smartphone" class="w-32 h-32 text-purple-400"></i>
+                </div>
+                
+                <div class="relative z-10 flex flex-col h-full">
+                    <div class="mb-6">
+                        <div class="w-12 h-12 rounded bg-purple-900/50 flex items-center justify-center border border-purple-500/30 mb-4 group-hover:border-purple-400 transition-colors">
+                            <i data-lucide="download" class="text-purple-400"></i>
+                        </div>
+                        <h3 class="text-3xl font-cyber text-white mb-2 group-hover:text-purple-300 transition-colors">SYSTEM APK</h3>
+                        <p class="text-gray-400 leading-relaxed text-sm">
+                            Deploy the mobile client. Establish remote neural connections and monitor peer status on the go.
+                        </p>
+                    </div>
+                    
+                    <div class="mt-auto pt-6 border-t border-gray-800">
+                        <div class="flex flex-col gap-3">
+                            <div class="flex justify-between text-xs font-mono text-purple-600 mb-1">
+                                <span>FILE SIZE</span>
+                                <span>45.2 MB</span>
+                            </div>
+                            <!-- Action Button -->
+                            <a href="#" onclick="triggerLink('apk')" class="cyber-btn w-full bg-transparent border border-purple-500 hover:bg-purple-500/20 text-purple-400 hover:text-white font-bold font-cyber py-4 px-6 rounded flex items-center justify-center gap-2 uppercase tracking-wider">
+                                <i data-lucide="hard-drive-download" class="w-5 h-5"></i>
+                                Download Client
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Terminal Output / Footer -->
+        <div class="mt-16 w-full max-w-4xl bg-black/80 border border-gray-800 rounded p-4 font-mono text-xs text-green-500/80 h-32 overflow-hidden relative">
+            <div class="absolute top-2 right-2 flex gap-1">
+                <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                <div class="w-2 h-2 rounded-full bg-yellow-500"></div>
+                <div class="w-2 h-2 rounded-full bg-green-500"></div>
+            </div>
+            <div id="terminal-content">
+                <p>> System initialized...</p>
+                <p>> Loading assets...</p>
+                <p>> Neural Link Protocol [NLP] active.</p>
+                <p>> Awaiting user input...</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Simulation Script -->
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Terminal Effect
+        const terminal = document.getElementById('terminal-content');
+        const messages = [
+            "Scanning local nodes...",
+            "Encryption keys verified.",
+            "Handshake protocol ready.",
+            "P2P mesh network stable.",
+            "Detecting user proximity...",
+            "Link strength: 98%"
+        ];
+
+        setInterval(() => {
+            const p = document.createElement('p');
+            p.textContent = `> ${messages[Math.floor(Math.random() * messages.length)]}`;
+            terminal.appendChild(p);
+            if(terminal.children.length > 6) terminal.removeChild(terminal.children[0]);
+        }, 3000);
+
+        // Link Triggers (Mock functionality)
+        function triggerLink(type) {
+            if(type === 'main') {
+                const p = document.createElement('p');
+                p.className = "text-cyan-400";
+                p.textContent = "> INITIALIZING MAIN SYSTEM SEQUENCE...";
+                terminal.appendChild(p);
+                setTimeout(() => {
+                    // Replace this with your actual Main System URL
+                    // window.location.href = "YOUR_MAIN_SYSTEM_URL_HERE"; 
+                    alert("Redirecting to Main Neural System..."); 
+                }, 1000);
+            } else {
+                const p = document.createElement('p');
+                p.className = "text-purple-400";
+                p.textContent = "> PREPARING PACKAGE DOWNLOAD...";
+                terminal.appendChild(p);
+                setTimeout(() => {
+                    // Replace this with your actual APK URL
+                    // window.location.href = "YOUR_APK_URL_HERE";
+                    alert("Starting Download: Neural_Link_v2.4.9.apk");
+                }, 1000);
+            }
+        }
+
+        // Canvas Background Animation
+        const canvas = document.getElementById('neuroCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let particles = [];
+        
+        // Configuration
+        const particleCount = 60;
+        const connectionDistance = 150;
+        const mouseDistance = 200;
+
+        let mouse = { x: null, y: null };
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.x;
+            mouse.y = e.y;
+        });
+
+        window.addEventListener('resize', resize);
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            initParticles();
+        }
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * 1.5;
+                this.vy = (Math.random() - 0.5) * 1.5;
+                this.size = Math.random() * 2 + 1;
+                this.color = Math.random() > 0.5 ? '#00f3ff' : '#bc13fe'; // Cyan or Purple
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Bounce off edges
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+
+                // Mouse interaction
+                if (mouse.x != null) {
+                    let dx = mouse.x - this.x;
+                    let dy = mouse.y - this.y;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < mouseDistance) {
+                        const forceDirectionX = dx / distance;
+                        const forceDirectionY = dy / distance;
+                        const force = (mouseDistance - distance) / mouseDistance;
+                        const directionX = forceDirectionX * force * 0.5;
+                        const directionY = forceDirectionY * force * 0.5;
+                        this.vx += directionX;
+                        this.vy += directionY;
+                    }
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            
+            // Update and draw particles
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+
+                // Draw connections
+                for (let j = i; j < particles.length; j++) {
+                    let dx = particles[i].x - particles[j].x;
+                    let dy = particles[i].y - particles[j].y;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < connectionDistance) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = `rgba(0, 243, 255, ${1 - distance / connectionDistance})`;
+                        ctx.lineWidth = 1;
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        resize();
+        animate();
+
+    </script>
+</body>
+</html>
