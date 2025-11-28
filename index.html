@@ -267,28 +267,19 @@
 
     <!-- Simulation Script + Firebase Logic -->
     <script type="module">
-        // Firebase Imports - Added signInWithCustomToken and onAuthStateChanged
+        // Firebase Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, updateDoc, increment, getDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase Configuration (Environment Variables)
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // State
+        // Global State
         let currentUser = null;
         let isDownloadInProgress = false;
         let unsubscribeSnapshot = null;
-
+        
         // Terminal DOM
         const terminal = document.getElementById('terminal-content');
-        
+
         // Helper: Add to Terminal
         function logToTerminal(text, colorClass = "text-green-500") {
             if(!terminal) return;
@@ -302,41 +293,57 @@
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        // 1. Authenticate with Correct Priority (Custom Token > Anonymous)
-        const initSystem = async () => {
+        // Initialize App Wrapper
+        async function initializeSystem() {
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                    logToTerminal("Secure ID verified.", "text-green-400");
-                } else {
-                    await signInAnonymously(auth);
-                    logToTerminal("Anonymous link established.", "text-yellow-400");
+                if (typeof __firebase_config === 'undefined') {
+                    throw new Error("Firebase config missing");
                 }
-            } catch (error) {
-                console.error("Auth Failed:", error);
-                logToTerminal("Connection Error: " + error.message, "text-red-500");
+                
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+                // Initialize Firebase
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+
+                // 1. Auth Logic (Priority: Custom Token > Anonymous)
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                        logToTerminal("Secure ID verified.", "text-green-400");
+                    } else {
+                        await signInAnonymously(auth);
+                        logToTerminal("Anonymous link established.", "text-yellow-400");
+                    }
+                } catch (error) {
+                    console.error("Auth Failed:", error);
+                    logToTerminal("Connection Mode: Offline (Visual Only)", "text-red-500");
+                }
+
+                // 2. Auth Listener
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUser = user;
+                        setupDownloadCounter(db, appId);
+                    } else {
+                        currentUser = null;
+                        if(unsubscribeSnapshot) unsubscribeSnapshot();
+                    }
+                });
+
+                // Attach Download Handler with DB ref
+                window.handleDownloadContext = () => handleDownload(db, appId);
+
+            } catch (err) {
+                console.error("System Init Error:", err);
+                logToTerminal("System Integrity Check: Failed", "text-red-600");
             }
-        };
+        }
 
-        // Start Auth
-        initSystem();
-
-        // 2. Listen to Auth State
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                setupDownloadCounter();
-            } else {
-                currentUser = null;
-                if(unsubscribeSnapshot) unsubscribeSnapshot();
-            }
-        });
-
-        // 3. Real-time Download Counter Logic
-        function setupDownloadCounter() {
-            if (!currentUser) return;
-
-            // Path: artifacts/{appId}/public/data/stats/summary
+        // 3. Download Counter Logic (Read-Only on Load)
+        function setupDownloadCounter(db, appId) {
             const statsRef = doc(db, 'artifacts', appId, 'public', 'data', 'stats', 'summary');
 
             unsubscribeSnapshot = onSnapshot(statsRef, (docSnap) => {
@@ -348,23 +355,21 @@
                     const count = data.downloadCount || 0;
                     countEl.textContent = `${count.toLocaleString()} DOWNLOADS`;
                 } else {
-                    // Initialize if doesn't exist
-                    // Note: This check handles the first-time setup for the app
-                    setDoc(statsRef, { downloadCount: 0 }, { merge: true }).catch(err => {
-                        console.warn("Could not init stats (might be missing write permission):", err);
-                    });
+                    // FIX: Do NOT try to setDoc(0) here. 
+                    // This causes permission errors if the user lacks create privileges.
+                    // Just show 0 locally. The doc will be created on first download.
                     countEl.textContent = "0 DOWNLOADS";
                 }
             }, (error) => {
-                console.error("Counter Error:", error);
+                // Silent error to console, friendly message to UI
+                console.warn("Stats stream issue:", error.message); 
                 const countEl = document.getElementById('download-count');
-                if(countEl) countEl.textContent = "OFFLINE";
-                logToTerminal("Data stream error: " + error.code, "text-red-500");
+                if(countEl) countEl.textContent = "--"; 
             });
         }
 
-        // 4. Handle Download Click
-        async function handleDownload() {
+        // 4. Handle Download Action
+        async function handleDownload(db, appId) {
             if (isDownloadInProgress) return;
             isDownloadInProgress = true;
 
@@ -372,24 +377,25 @@
             
             logToTerminal("Initiating download sequence...", "text-purple-400");
 
-            if (currentUser) {
+            if (currentUser && db && appId) {
                 try {
                     const statsRef = doc(db, 'artifacts', appId, 'public', 'data', 'stats', 'summary');
                     
-                    // Atomic increment
+                    // Atomic increment - Try update first
                     await updateDoc(statsRef, {
                         downloadCount: increment(1)
                     });
                     
                     logToTerminal("Download token verified.", "text-purple-400");
                 } catch (e) {
-                    console.error("Update failed", e);
-                    // Try creating if update fails (fallback)
+                    // If update fails (e.g. doc doesn't exist), try to create it
                     try {
                         const statsRef = doc(db, 'artifacts', appId, 'public', 'data', 'stats', 'summary');
                         await setDoc(statsRef, { downloadCount: 1 }, { merge: true });
+                        logToTerminal("New stat entry created.", "text-purple-400");
                     } catch(err) {
-                        // Ignore errors, let download proceed
+                        // If both fail (permission error), just log and proceed with download
+                        console.warn("Could not track download stats:", err);
                     }
                 }
             }
@@ -402,7 +408,7 @@
             }, 800);
         }
 
-        // Expose functions to window (for legacy onclick, or attach listeners)
+        // Global Triggers
         window.triggerLink = (type) => {
             if(type === 'main') {
                 logToTerminal("Redirecting to Main System...", "text-cyan-400");
@@ -410,11 +416,16 @@
                     window.location.href = "https://omaairsk.github.io/NEURAL-LINK-P2P-SYSTEM/"; 
                 }, 1000);
             } else if (type === 'apk') {
-                handleDownload();
+                if (window.handleDownloadContext) {
+                    window.handleDownloadContext();
+                } else {
+                    // Fallback if init failed
+                    window.location.href = "https://omaairsk.github.io/NEURAL-LINK-Portal/NEURAL%20LINK-P2P%20SYSTEM.apk";
+                }
             }
         };
 
-        // Attach event listener for the APK button specifically
+        // Attach Button Listeners
         const downloadBtn = document.getElementById('download-btn');
         if(downloadBtn) {
             downloadBtn.addEventListener('click', (e) => {
@@ -422,6 +433,10 @@
                 triggerLink('apk');
             });
         }
+
+        // Start System
+        initializeSystem();
+
 
         // --- Visual Effects (Canvas) ---
         
