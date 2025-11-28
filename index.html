@@ -226,12 +226,18 @@
                     
                     <div class="mt-auto pt-6 border-t border-gray-800">
                         <div class="flex flex-col gap-3">
-                            <div class="flex justify-between text-xs font-mono text-purple-600 mb-1">
-                                <span>FILE SIZE</span>
-                                <span>45.2 MB</span>
+                            <div class="flex justify-between items-center text-xs font-mono text-purple-600 mb-1">
+                                <div class="flex items-center gap-2">
+                                    <span>FILE SIZE</span>
+                                    <span>45.2 MB</span>
+                                </div>
+                                <div class="flex items-center gap-2 text-purple-400">
+                                    <i data-lucide="users" class="w-3 h-3"></i>
+                                    <span id="download-count">LOADING...</span>
+                                </div>
                             </div>
                             <!-- Action Button -->
-                            <a href="#" onclick="triggerLink('apk')" class="cyber-btn w-full bg-transparent border border-purple-500 hover:bg-purple-500/20 text-purple-400 hover:text-white font-bold font-cyber py-4 px-6 rounded flex items-center justify-center gap-2 uppercase tracking-wider">
+                            <a href="#" id="download-btn" class="cyber-btn w-full bg-transparent border border-purple-500 hover:bg-purple-500/20 text-purple-400 hover:text-white font-bold font-cyber py-4 px-6 rounded flex items-center justify-center gap-2 uppercase tracking-wider">
                                 <i data-lucide="hard-drive-download" class="w-5 h-5"></i>
                                 Download Client
                             </a>
@@ -259,13 +265,170 @@
 
     </main>
 
-    <!-- Simulation Script -->
-    <script>
+    <!-- Simulation Script + Firebase Logic -->
+    <script type="module">
+        // Firebase Imports - Added signInWithCustomToken and onAuthStateChanged
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, increment, getDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration (Environment Variables)
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // State
+        let currentUser = null;
+        let isDownloadInProgress = false;
+        let unsubscribeSnapshot = null;
+
+        // Terminal DOM
+        const terminal = document.getElementById('terminal-content');
+        
+        // Helper: Add to Terminal
+        function logToTerminal(text, colorClass = "text-green-500") {
+            if(!terminal) return;
+            const p = document.createElement('p');
+            if(colorClass) p.className = colorClass;
+            p.textContent = `> ${text}`;
+            terminal.appendChild(p);
+            // Keep terminal clean
+            if(terminal.children.length > 6) terminal.removeChild(terminal.children[0]);
+            // Auto scroll
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        // 1. Authenticate with Correct Priority (Custom Token > Anonymous)
+        const initSystem = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                    logToTerminal("Secure ID verified.", "text-green-400");
+                } else {
+                    await signInAnonymously(auth);
+                    logToTerminal("Anonymous link established.", "text-yellow-400");
+                }
+            } catch (error) {
+                console.error("Auth Failed:", error);
+                logToTerminal("Connection Error: " + error.message, "text-red-500");
+            }
+        };
+
+        // Start Auth
+        initSystem();
+
+        // 2. Listen to Auth State
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                setupDownloadCounter();
+            } else {
+                currentUser = null;
+                if(unsubscribeSnapshot) unsubscribeSnapshot();
+            }
+        });
+
+        // 3. Real-time Download Counter Logic
+        function setupDownloadCounter() {
+            if (!currentUser) return;
+
+            // Path: artifacts/{appId}/public/data/stats/summary
+            const statsRef = doc(db, 'artifacts', appId, 'public', 'data', 'stats', 'summary');
+
+            unsubscribeSnapshot = onSnapshot(statsRef, (docSnap) => {
+                const countEl = document.getElementById('download-count');
+                if(!countEl) return;
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    const count = data.downloadCount || 0;
+                    countEl.textContent = `${count.toLocaleString()} DOWNLOADS`;
+                } else {
+                    // Initialize if doesn't exist
+                    // Note: This check handles the first-time setup for the app
+                    setDoc(statsRef, { downloadCount: 0 }, { merge: true }).catch(err => {
+                        console.warn("Could not init stats (might be missing write permission):", err);
+                    });
+                    countEl.textContent = "0 DOWNLOADS";
+                }
+            }, (error) => {
+                console.error("Counter Error:", error);
+                const countEl = document.getElementById('download-count');
+                if(countEl) countEl.textContent = "OFFLINE";
+                logToTerminal("Data stream error: " + error.code, "text-red-500");
+            });
+        }
+
+        // 4. Handle Download Click
+        async function handleDownload() {
+            if (isDownloadInProgress) return;
+            isDownloadInProgress = true;
+
+            const apkUrl = "https://omaairsk.github.io/NEURAL-LINK-Portal/NEURAL%20LINK-P2P%20SYSTEM.apk";
+            
+            logToTerminal("Initiating download sequence...", "text-purple-400");
+
+            if (currentUser) {
+                try {
+                    const statsRef = doc(db, 'artifacts', appId, 'public', 'data', 'stats', 'summary');
+                    
+                    // Atomic increment
+                    await updateDoc(statsRef, {
+                        downloadCount: increment(1)
+                    });
+                    
+                    logToTerminal("Download token verified.", "text-purple-400");
+                } catch (e) {
+                    console.error("Update failed", e);
+                    // Try creating if update fails (fallback)
+                    try {
+                        const statsRef = doc(db, 'artifacts', appId, 'public', 'data', 'stats', 'summary');
+                        await setDoc(statsRef, { downloadCount: 1 }, { merge: true });
+                    } catch(err) {
+                        // Ignore errors, let download proceed
+                    }
+                }
+            }
+
+            logToTerminal("Downloading package: NEURAL_LINK.apk", "text-purple-300");
+            
+            setTimeout(() => {
+                window.location.href = apkUrl;
+                isDownloadInProgress = false;
+            }, 800);
+        }
+
+        // Expose functions to window (for legacy onclick, or attach listeners)
+        window.triggerLink = (type) => {
+            if(type === 'main') {
+                logToTerminal("Redirecting to Main System...", "text-cyan-400");
+                setTimeout(() => {
+                    window.location.href = "https://omaairsk.github.io/NEURAL-LINK-P2P-SYSTEM/"; 
+                }, 1000);
+            } else if (type === 'apk') {
+                handleDownload();
+            }
+        };
+
+        // Attach event listener for the APK button specifically
+        const downloadBtn = document.getElementById('download-btn');
+        if(downloadBtn) {
+            downloadBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                triggerLink('apk');
+            });
+        }
+
+        // --- Visual Effects (Canvas) ---
+        
         // Initialize Icons
         lucide.createIcons();
 
-        // Terminal Effect
-        const terminal = document.getElementById('terminal-content');
+        // Random Terminal Messages
         const messages = [
             "Scanning local nodes...",
             "Encryption keys verified.",
@@ -276,34 +439,10 @@
         ];
 
         setInterval(() => {
-            const p = document.createElement('p');
-            p.textContent = `> ${messages[Math.floor(Math.random() * messages.length)]}`;
-            terminal.appendChild(p);
-            if(terminal.children.length > 6) terminal.removeChild(terminal.children[0]);
-        }, 3000);
-
-        // Link Triggers (Mock functionality)
-        function triggerLink(type) {
-            if(type === 'main') {
-                const p = document.createElement('p');
-                p.className = "text-cyan-400";
-                p.textContent = "> INITIALIZING MAIN SYSTEM SEQUENCE...";
-                terminal.appendChild(p);
-                setTimeout(() => {
-                    // Redirect to the provided main system link
-                    window.location.href = "https://omaairsk.github.io/NEURAL-LINK-P2P-SYSTEM/"; 
-                }, 1000);
-            } else {
-                const p = document.createElement('p');
-                p.className = "text-purple-400";
-                p.textContent = "> PREPARING PACKAGE DOWNLOAD...";
-                terminal.appendChild(p);
-                setTimeout(() => {
-                    // Start download
-                    window.location.href = "https://omaairsk.github.io/NEURAL-LINK-Portal/NEURAL%20LINK-P2P%20SYSTEM.apk";
-                }, 1000);
+            if(!isDownloadInProgress) {
+                logToTerminal(messages[Math.floor(Math.random() * messages.length)]);
             }
-        }
+        }, 4000);
 
         // Canvas Background Animation
         const canvas = document.getElementById('neuroCanvas');
@@ -312,7 +451,6 @@
         let width, height;
         let particles = [];
         
-        // Configuration
         const particleCount = 60;
         const connectionDistance = 150;
         const mouseDistance = 200;
@@ -339,18 +477,16 @@
                 this.vx = (Math.random() - 0.5) * 1.5;
                 this.vy = (Math.random() - 0.5) * 1.5;
                 this.size = Math.random() * 2 + 1;
-                this.color = Math.random() > 0.5 ? '#00f3ff' : '#bc13fe'; // Cyan or Purple
+                this.color = Math.random() > 0.5 ? '#00f3ff' : '#bc13fe'; 
             }
 
             update() {
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // Bounce off edges
                 if (this.x < 0 || this.x > width) this.vx *= -1;
                 if (this.y < 0 || this.y > height) this.vy *= -1;
 
-                // Mouse interaction
                 if (mouse.x != null) {
                     let dx = mouse.x - this.x;
                     let dy = mouse.y - this.y;
@@ -384,18 +520,13 @@
 
         function animate() {
             ctx.clearRect(0, 0, width, height);
-            
-            // Update and draw particles
             for (let i = 0; i < particles.length; i++) {
                 particles[i].update();
                 particles[i].draw();
-
-                // Draw connections
                 for (let j = i; j < particles.length; j++) {
                     let dx = particles[i].x - particles[j].x;
                     let dy = particles[i].y - particles[j].y;
                     let distance = Math.sqrt(dx * dx + dy * dy);
-
                     if (distance < connectionDistance) {
                         ctx.beginPath();
                         ctx.strokeStyle = `rgba(0, 243, 255, ${1 - distance / connectionDistance})`;
@@ -411,7 +542,6 @@
 
         resize();
         animate();
-
     </script>
 </body>
 </html>
