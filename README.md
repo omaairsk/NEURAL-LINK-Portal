@@ -16,7 +16,7 @@ This repository hosts the landing page and portal for the **NEURAL LINK P2P SYST
 | :--- | :--- |
 | **Portal (This Site)** | [Launch Portal](https://omaairsk.github.io/NEURAL-LINK-Portal/) |
 | **Web System** | [Initialize Link](https://omaairsk.github.io/NEURAL-LINK-P2P-SYSTEM/) |
-| **Android Client** | [Download APK](https://omaairsk.github.io/NEURAL-LINK-Portal/NEURAL-LINK-P2P-SYSTEM.apk) |
+| **Android Client** | [Download APK](https://omaairsk.github.io/NEURAL-LINK-Portal/app-release.apk) |
 
 ---
 
